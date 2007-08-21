@@ -1,0 +1,205 @@
+LSI Megaraid Control and Monitoring Tools by Jefferson Ogata
+------------------------------------------------------------
+
+
+Disclaimer
+----------
+
+WARNING: Use this software at your own risk. The author accepts no
+responsibility for the consequences of your use of this software.
+
+WARNING: Use this software at your own risk. The author accepts no
+responsibility for the consequences of your use of this software.
+
+WARNING: Use this software at your own risk. The author accepts no
+responsibility for the consequences of your use of this software.
+
+These programs directly query megaraid adapters via the ioctl(2) driver
+interface and do a number of undocumented things. I and my colleagues use this
+software regularly and have had no problems, but your mileage may vary. If
+something goes terribly wrong and your RAID configs all get blown away, the
+author accepts no responsibility for the consequences.
+
+Please read this document carefully as it contains a warning or two. If you
+have built the programs but are having any issues running them, please see the
+Building, Device Nodes, and Limitations notes further down in this document.
+
+
+Introduction
+------------
+
+I've spent a fair amount of time working out the low-level interface to
+megaraid adapters. This stems from the fact that I use a lot of these beasts
+and have had failures at one time or another. The adapters are fast and
+extremely useful, but they aren't bulletproof. For example, disks showing a
+certain number of media errors are not failed immediately by the adapters; the
+adapters seem to want to pass some threshold of failure before they decide that
+a disk really needs to be dropped from a RAID, and by that time it's possible
+there could be consistency problems. I wrote these tools so I could more
+effectively monitor media errors (dellmgr makes this very tedious) and also
+take advantage of the device self-test functions provided with drives.
+Self-tests are in my opinion a suitable way to detect imminent drive failures
+without tying up the adapter and SCSI bandwidth doing patrol reads. It is also
+very useful to be able to conduct a self-test on a spare disk before using it
+for a rebuild.
+
+Another issue I've had with megaraids is keeping current documentation on RAID
+configuration. You may choose a completely logical RAID layout when first
+configuration a system, but that doesn't mean you'll remember it if you have to
+reconstruct it in an emergency--did I leave out a disk for a hot spare? Which
+one? Furthermore, as disks fail and hot spares are rotated in place, the
+configuration changes over time. If you don't update your documentation every
+time a disk fails, you lose track of it. While LSI's MegaCli program provides
+methods for dumping the configuration (although verbosely) and saving and
+restoring it from files, Dell's dellmgr doesn't give you any sensible way to
+track down what spans comprise a logical disk. I wrote these programs in part
+to solve this problem.
+
+
+Programs
+--------
+
+This distribution contains three programs and a script:
+
+
+*megactl*
+
+megactl queries PERC2, PERC3, and PERC4 adapters and reports adapter
+configuration, physical and logical drive condition, drive log sense pages, and
+various other useful information. This allows you to document the actual
+configuration of the adapter, since, for one thing, Dell's dellmgr does not
+tell you which specific logical drive a given disk belongs to.
+
+megactl has several features to query SCSI drive log pages, where each drive
+controller saves accumulated error counts, drive temperature, self-test
+results, et al. To get a list of supported log pages for a given drive, use
+"megactl -vv -l 0 <target>" where target is the name of the drive, e.g. a0c1t2
+for SCSI target 2 on channel 1 of adapter 0. In addition "-s" is shorthand for
+"-l 0x10", "-t" is shorthand for "-l 0x0d", and "-e" is shorthand for "-l 0x02
+-l 0x03 -l 0x05". megactl knows how to parse several useful log pages, but
+there are others where you'll have to interpret the results yourself. Feel free
+to write more parsing code.
+
+megactl output is governed by a verbosity flag. At lower verbosity levels, the
+program tends to minimize log page output unless it represents an actual
+problem. So to see the full self-test log, you need to add "-vv". I usually run
+the program with a single "-v".
+
+Self-test and most status operations allow you to designate either an entire
+adapter (a0), a specific channel (a0c1), or a specific drive (a0c1t2). When
+performing drive self-test operations (q.v.), be sure to specify the actual
+drive you wish to test, or you will end up starting a test on every drive on
+the system. You may designate as many objects as you please, e.g.
+"a0c0t{1,2,3,4,5,8} a0c1 a1".
+
+megactl provides a health-check function, which inspects health check operation
+allows only entire adapters to be designated. If no target is designated, the
+program operates on all possible objects.
+
+megactl with the -H option performs a health check of all (or specified)
+adapters. By default, the health check checks the state of the adapter battery,
+the state of all logical drives, and for each physical drive, the media error
+count logged by the adapter, the read, write,and verify error log pages, and
+the temperature log page. You can tune the log pages the health check will
+inspect by specifying them with "-e", "-s", "-t", or "-l"; note that if you do
+this, there is no default and you must specify every log page you wish to
+inspect ("-et" for the default behaviour). If a problem is found, the program
+prints the adapter and relevant drive info. If everything is okay, the program
+is completely silent. So "megactl -vH" can be a useful cron job.
+
+When using the health check you may specify which adapters you want to check,
+but you may not designate specific channels or drives.
+
+megactl also allows you to instruct the drive to perform a long ("-T long") or
+short ("-T short") background self-test procedure, which does not take the
+drive offline. I have performed self-tests on drives that are part of an
+operational RAID many times with no problems. I recommend that you self-test
+only one drive in a given span at a time; if the self-test causes the drive to
+log errors, the adapter may fail the drive, and you don't want that to happen
+to two drives in a span simultaneously or you may lose data.
+
+You can get full usage info for megactl by executing it with the -? flag.
+
+I use megactl on a number of PERC models, especially PERC3/QCs and PERC4/DCs.
+In the past, megactl was known to work well with PERC2/DC adapters but I no
+longer operate any systems with these adapters, so this may have broken. Please
+let me know if you have success or problems.
+
+megactl generally tries not to do anything harmful, so it's pretty safe.
+Primarily it queries disks; the only instructions it issues in its current form
+are to execute self-test operations.
+
+
+*megasasctl*
+
+The second program, megasasctl, is just like megactl, but intended for PERC5
+adapters. The only syntactic difference is that instead of naming targets with
+channels and ids, they are named with enclosures and slots, e.g. a0, a1e0,
+a2e1s9.
+
+The SAS support is brand new, and I'm sure I've got some things wrong. I
+haven't been able to fully test SAS support yet because I don't have any bad
+SAS disks.
+
+
+*megatrace*
+
+megatrace is a debugging program which can be used to trace PERC-related
+ioctl() system calls that another program makes. You won't need that unless
+you're trying to add features to megactl, or are exceptionally curious. This
+program uses ptrace(2) and can inspect and modify data structures to help you
+suss out what's going on in dellmgr and MegaCli.
+
+
+*megarpt*
+
+megarpt is a script I run in a cron job each night. It performs a health check
+on all adapters, and emails any problems, along with the adapter configuration,
+to root. It is handy to have the adapter configuration logged in case you need
+to reconstruct adapter state in a catastrophic failure. There are various
+scenarios involving hot spares and multiple drive failures where the adapter
+configuration may not be quite what you thought it was. To use megarpt, copy
+megarpt and megactl into /root/ and add a cron entry for /root/megarpt. Or
+tweak as you see fit; there isn't much to it.
+
+megarpt needs to be tweaked for megasasctl applications; it currently works
+only with pre-SAS models.
+
+
+*megasasrpt*
+
+megasasrpt is just like megarpt, but for PERC5 adapters.
+
+
+Building
+--------
+
+This software has been built successfully on RHEL 3, 4, and 5, and Debian Etch,
+using the default gcc compiler, and Red Hat Linux 7.3 or RHEL 2.1 should work
+as well. Simply run make in the src directory.
+
+
+Device Nodes
+------------
+
+megactl and megasasctl require the existence of an appropriate device node in
+order to communicate with adapters. For megactl, this device node should be
+/dev/megadev0, and is created automatically by Dell's dellmgr program. You may
+create it yourself by finding the major device number for megadev in
+/proc/devices and creating a character device with that major number and minor
+number 0. See the megarpt shell script if this is not clear. For megasasctl,
+the device node is /dev/megaraid_sas_ioctl_node, and is created automatically
+by LSI's MegaCli program. It should have the major number of megaraid_sas_ioctl
+from /proc/devices and minor number 0. See the megasasrpt shell script for an
+example of how to create this.
+
+
+Limitations
+-----------
+
+Currently these programs only operate if built as 32-bit targets. On 64-bit
+architectures, you therefore will need 32-bit compatibility libraries. This
+should not require any special action on Red Hat, but on Debian you may need to
+install a few things.
+
+

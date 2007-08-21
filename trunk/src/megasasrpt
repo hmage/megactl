@@ -1,0 +1,66 @@
+#!/bin/sh
+#
+# megarpt
+#
+# Emails a message to root with megaraid configuration and any
+# output from a health check. Useful as a nightly cron job.
+#
+# Author: Jefferson Ogata (JO317) <ogata@antibozo.net>
+# Date: 2007/08/20
+
+VERSION='0.3'
+MEGACTL=/root/megasasctl
+DEVICE=/dev/megaraid_sas_ioctl_node
+DEVICENAME=megaraid_sas_ioctl
+DEVICEPERM=400
+ME=`basename $0`
+
+if [ -x $MEGACTL ]; then
+    MEGACTLVERSION=`$MEGACTL -V`
+else
+    echo "No megactl program in $MEGACTL" >&2
+    exit 1
+fi
+
+MAJOR=`grep "$DEVICENAME" /proc/devices | awk '{print $1}'`
+
+if [ -n "$MAJOR" -a ! -e "$DEVICE" ]; then
+    mknod "$DEVICE" c "$MAJOR" 0
+    chmod "$DEVICEPERM" "$DEVICE"
+fi
+
+if [ -e "$DEVICE" ]; then
+
+    WARN=
+    HOST=`/bin/uname -n`
+    DATE=`/bin/date '+%Y/%m/%d %H:%M:%S %Z'`
+    HC=/tmp/megactl.$$
+
+    $MEGACTL -vH > $HC 2>/dev/null
+    if [ -s $HC ]; then
+	WARN=' **WARNING**'
+    fi
+
+    (
+	if [ -s $HC ]; then
+	    echo "megaraid health check"
+	    echo "---------------------"
+	    cat $HC
+	    echo
+	    echo
+	fi
+
+	echo "megaraid configuration"
+	echo "----------------------"
+	$MEGACTL -vp
+
+	echo
+	echo "--------------"
+	echo "$ME version: $VERSION"
+	echo "megactl version: $MEGACTLVERSION"
+    ) 2>/dev/null |
+	/bin/mail -s "RAID report:$WARN $HOST $DATE" root
+
+    rm -f $HC
+fi
+
