@@ -205,9 +205,9 @@ static char *friendlySize (uint64_t b, char *unit)
     int			k;
     static char		bytes[128];
 
-    for (k = 0; (b >= 1024) && (k < sizeof (suffix) / sizeof (suffix[0]) - 1); ++k, b /= 1024)
+    for (k = 0; (b >= 10000) && (k < sizeof (suffix) / sizeof (suffix[0]) - 1); ++k, b /= 1024)
 	;
-    snprintf (bytes, sizeof bytes, "%3llu%s%s", b, suffix[k], unit);
+    snprintf (bytes, sizeof bytes, "%4llu%s%s", b, suffix[k], unit);
     return bytes;
 }
 
@@ -235,7 +235,7 @@ void describePhysicalDrive (FILE *f, struct physical_drive_info *d, int verbosit
 	fprintf (f, " %8s %-16s", d->vendor, d->model);
     if (verbosity > 1)
 	fprintf (f, " rev:%-4s s/n:%-20s", d->revision, d->serial);
-    fprintf (f, "  %7s", friendlySize (d->blocks << 9, "B"));
+    fprintf (f, "  %8s", friendlySize (d->blocks << 9, "B"));
     fprintf (f, " %5s%c", d->span && d->span->num_logical_drives ? d->span->logical_drive[0]->name : "", d->span && (d->span->num_logical_drives > 1) ? '+' : ' ');
     fprintf (f, " %-8s", state);
     if (d->media_errors || d->other_errors)
@@ -277,7 +277,7 @@ void describeLogicalDrive (FILE *f, struct logical_drive_info *l, int verbosity)
     }
 
     fprintf (f, "%-8s", l->name);
-    fprintf (f, "  %s", friendlySize (blocks << 9, "B"));
+    fprintf (f, " %8s", friendlySize (blocks << 9, "B"));
     fprintf (f, " RAID %u%s", l->raid_level, l->num_spans > 1 ? "0" : " ");
     fprintf (f, " %2ux%-2u", l->num_spans, l->span_size);
     fprintf (f, " %s", state);
@@ -290,7 +290,7 @@ void describeLogicalDrive (FILE *f, struct logical_drive_info *l, int verbosity)
 	    int				j;
 
 	    r = &l->span[k];
-	    fprintf (f, "       row %2d:", k);
+	    fprintf (f, "      row %2d:", k);
 	    for (j = 0, p = r->span->disk; j < r->span->num_disks; ++j, ++p)
 	    {
 		char			*flag = (*p)->state != PdStateOnline ? "*" : " ";
@@ -806,9 +806,9 @@ int main (int argc, char **argv)
 		if (d->state == PdStateHotspare)
 		{
 		    if (x == 0)
-			fprintf (stdout, "hot spares   :");
+			fprintf (stdout, "hot spares  :");
 		    else if ((x % 8) == 0)
-			fprintf (stdout, "             :");
+			fprintf (stdout, "            :");
 		    fprintf (stdout, "  %-8s", d->name);
 		    if (((++x) % 8) == 0)
 			fprintf (stdout, "\n");
@@ -830,9 +830,9 @@ int main (int argc, char **argv)
 		if ((!(d->span)) && (d->state != PdStateHotspare))
 		{
 		    if (x == 0)
-			fprintf (stdout, "unconfigured :");
+			fprintf (stdout, "unconfigured:");
 		    else if ((x % 8) == 0)
-			fprintf (stdout, "             :");
+			fprintf (stdout, "            :");
 		    fprintf (stdout, "  %-8s", d->name);
 		    if (((++x) % 8) == 0)
 			fprintf (stdout, "\n");
