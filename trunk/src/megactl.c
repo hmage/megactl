@@ -43,6 +43,8 @@ Cleaner log page output.
 
 Fixes for 64-bit systems. Currently builds only with -m32.
 
+Fetch TTY logs.
+
 ********************************************************************/
 
 #include	"mega.h"
@@ -82,7 +84,7 @@ Fixes for 64-bit systems. Currently builds only with -m32.
 #endif	/* defined(MEGA_SAS_CTL) */
 
 
-static char		*version = "0.4.1";
+static char		*version = "0.4.3";
 
 
 static int		verbosity = 0;
@@ -359,8 +361,8 @@ int main (int argc, char **argv)
 {
     int				k;
     int				fd;
-    uint32_t			numAdapters;
     uint32_t			driverVersion;
+    uint32_t			numAdapters;
     int				startSelfTest = -1;
     int				healthCheck = 0;
     int				checkBattery = 1;
@@ -608,7 +610,7 @@ int main (int argc, char **argv)
 
     if (megaGetNumAdapters (fd, &numAdapters, sas) < 0)
     {
-	fprintf (stderr, "unable to determine number of adapters: %s\n", megaErrorString ());
+	fprintf (stderr, "unable to find any adapters: %s\n", megaErrorString ());
 	return 1;
     }
 

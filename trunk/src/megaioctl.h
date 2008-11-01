@@ -80,7 +80,10 @@ extern int	megaSasGetArrayConfig (struct mega_adapter_path *adapter, struct mega
 extern int	megaSasGetBatteryInfo (struct mega_adapter_path *adapter, struct mega_battery_info_sas *data);
 
 extern int	megaGetDriverVersion (int fd, uint32_t *version);
+
+/* You must call megaGetNumAdapters() before you issue any other inquiries, other than megaGetDriverVersion(). */
 extern int	megaGetNumAdapters (int fd, uint32_t *numAdapters, int sas);
+
 extern int	megaGetAdapterProductInfo (int fd, uint8_t adapno, mraid_pinfo_t *info);
 extern int	megaSasGetAdapterProductInfo (int fd, uint8_t adapno, struct megasas_ctrl_info *info);
 extern int	megaSasAdapterPing (int fd, uint8_t adapno);

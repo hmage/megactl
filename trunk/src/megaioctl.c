@@ -32,7 +32,28 @@
 #include	<scsi/scsi.h>
 
 
+/* This is arbitrary. */
+#define	MEGA_MAX_ADAPTERS	16
+
+struct mega_adapter_map
+{
+    uint8_t	count;				/* number of adapters found */
+    uint8_t	host[MEGA_MAX_ADAPTERS];	/* map of adapter index to host number */
+};
+
+static struct mega_adapter_map	*adapterMap = NULL;
+
+
 int		megaErrno = 0;
+
+
+static u16 hostMap (u16 adapno)
+{
+    if ((adapterMap == NULL) || (adapno >= adapterMap->count))
+	return 0;
+
+    return adapterMap->host[adapno];
+}
 
 
 static int doIoctl (struct mega_adapter_path *adapter, void *u)
@@ -49,7 +70,7 @@ static int doIoctl (struct mega_adapter_path *adapter, void *u)
 }
 
 
-static int driverQuery (int fd, uint16_t adap, void *data, uint32_t len, uint8_t subop)
+static int driverQuery (int fd, void *data, uint32_t len, uint8_t subop)
 {
     struct uioctl_t		u;
     struct mega_adapter_path	adapter;
@@ -64,6 +85,7 @@ static int driverQuery (int fd, uint16_t adap, void *data, uint32_t len, uint8_t
 	memset (data, 0, len);
 
     adapter.fd = fd;
+    adapter.adapno = 0;
     adapter.type = MEGA_ADAPTER_V34;
     if (doIoctl (&adapter, &u) < 0)
     {
@@ -82,7 +104,7 @@ static int oldCommand (struct mega_adapter_path *adapter, void *data, uint32_t l
     memset (&u, 0, sizeof u);
     u.outlen = len;
     u.ui.fcs.opcode = M_RD_IOCTL_CMD;
-    u.ui.fcs.adapno = MKADAP(adapter->adapno);
+    u.ui.fcs.adapno = MKADAP(hostMap (adapter->adapno));
     u.data = data;
     m->cmd = cmd;
     m->opcode = opcode;
@@ -108,7 +130,7 @@ static int newCommand (struct mega_adapter_path *adapter, void *data, uint32_t l
     memset (&u, 0, sizeof u);
     u.outlen = len;
     u.ui.fcs.opcode = M_RD_IOCTL_CMD_NEW;
-    u.ui.fcs.adapno = MKADAP(adapter->adapno);
+    u.ui.fcs.adapno = MKADAP(hostMap (adapter->adapno));
     u.ui.fcs.buffer = data;
     u.ui.fcs.length = len;
     u.data = data;
@@ -134,7 +156,7 @@ static int sasCommand (struct mega_adapter_path *adapter, void *data, uint32_t l
     struct megasas_dcmd_frame	*f = (struct megasas_dcmd_frame *) &u.frame;
 
     memset (&u, 0, sizeof u);
-    u.host_no = (u16) adapter->adapno;
+    u.host_no = hostMap (adapter->adapno);
 
     f->cmd = MFI_CMD_DCMD;
     f->flags = (u16) flags;
@@ -175,7 +197,7 @@ static int passthruCommand (struct mega_adapter_path *adapter, void *data, uint3
 	memset (&u, 0, sizeof u);
 	u.outlen = len;
 	u.ui.fcs.opcode = M_RD_IOCTL_CMD;
-	u.ui.fcs.adapno = MKADAP(adapter->adapno);
+	u.ui.fcs.adapno = MKADAP(hostMap (adapter->adapno));
 	u.data = data;
 	m->cmd = MBOXCMD_PASSTHRU;
 	m->xferaddr = (uint32_t) p;
@@ -219,7 +241,7 @@ static int passthruCommand (struct mega_adapter_path *adapter, void *data, uint3
 	struct megasas_pthru_frame	*f = (struct megasas_pthru_frame *) &u.frame;
 
 	memset (&u, 0, sizeof u);
-	u.host_no = (u16) adapter->adapno;
+	u.host_no = hostMap (adapter->adapno);
 
 	f->cmd = MFI_CMD_PD_SCSI_IO;
 	f->target_id = target;
@@ -451,23 +473,55 @@ int megaSasGetBatteryInfo (struct mega_adapter_path *adapter, struct mega_batter
 
 int megaGetDriverVersion (int fd, uint32_t *version)
 {
-    return driverQuery (fd, 0, version, sizeof (*version), 'e');
+    return driverQuery (fd, version, sizeof (*version), 'e');
 }
 
 
 int megaGetNumAdapters (int fd, uint32_t *numAdapters, int sas)
 {
+    static struct mega_adapter_map	realMap;
+    uint8_t				k;
+    uint8_t				count;
+
     if (sas)
     {
-	uint8_t		k;
-	for (k = 0; k < 16; ++k)
-	    if (megaSasAdapterPing (fd, k) < 0)
-		break;
-	*numAdapters = k;
-	return 0;
+	if (adapterMap == NULL)
+	{
+	    struct mega_adapter_map	fakeMap;
+
+	    /* initialize fake map to 1-to-1 map */
+	    for (k = 0; k < MEGA_MAX_ADAPTERS; ++k)
+		fakeMap.host[k] = k;
+	    fakeMap.count = k;
+	    adapterMap = &fakeMap;
+
+	    /* ping all possible adapters to build real map */
+	    count = 0;
+	    for (k = 0; k < MEGA_MAX_ADAPTERS; ++k)
+		if (megaSasAdapterPing (fd, k) >= 0)
+		    realMap.host[count++] = k;
+	    realMap.count = count;
+	    adapterMap = &realMap;
+	}
     }
     else
-	return driverQuery (fd, 0, numAdapters, sizeof (*numAdapters), 'm');
+    {
+	if (adapterMap == NULL)
+	{
+	    if (driverQuery (fd, &count, sizeof (count), 'm') < 0)
+		return -1;
+	    if (count > MEGA_MAX_ADAPTERS)
+		count = MEGA_MAX_ADAPTERS;
+
+	    for (k = 0; k < count; ++k)
+		realMap.host[k] = k;
+	    realMap.count = count;
+	    adapterMap = &realMap;
+	}
+    }
+
+    *numAdapters = adapterMap->count;
+    return 0;
 }
 
 
