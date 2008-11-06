@@ -275,6 +275,7 @@ void describeLogicalDrive (FILE *f, struct logical_drive_info *l, int verbosity)
 	 case 0:	blocks += r->blocks_per_disk * r->span->num_disks; break;
 	 case 1:	blocks += r->blocks_per_disk * r->span->num_disks / 2; break;
 	 case 5:	blocks += r->blocks_per_disk * (r->span->num_disks - 1); break;
+	 case 6:	blocks += r->blocks_per_disk * (r->span->num_disks - 2); break;
 	}
     }
 

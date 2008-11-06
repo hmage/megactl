@@ -60,6 +60,10 @@ struct uioctl_t {
 #pragma pack()
 
 
+/* Timestamps in the megaraid_sas event log are offset by this quantity. This is the epoch time of 2000-01-01T00:00:00 +0000. */
+#define	MEGA_SAS_TIME_OFFSET	0x386d4380
+
+
 extern int	megaErrno;
 
 extern int	megaScsiDriveInquiry (struct mega_adapter_path *adapter, uint8_t target, void *data, uint32_t len, uint8_t pageCode, uint8_t evpd);
